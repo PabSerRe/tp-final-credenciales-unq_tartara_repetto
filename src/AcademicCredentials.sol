@@ -26,6 +26,14 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     /// @param tokenId   credential id that was revoked
     event CredentialRevoked(uint256 indexed tokenId);
 
+    /// @notice Emitted when an admin grants issuer permissions to an account
+    /// @param account address that receives ISSUER_ROLE
+    event IssuerGranted(address indexed account);
+
+    /// @notice Emitted when an admin revokes issuer permissions from an account
+    /// @param account address that loses ISSUER_ROLE
+    event IssuerRevoked(address indexed account);
+
     // ==========================================================================
     // CONSTRUCTOR
     // ==========================================================================
@@ -37,6 +45,26 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(ISSUER_ROLE, msg.sender);
+    }
+
+    // ==========================================================================
+    // EXTERNAL — ADMIN
+    // ==========================================================================
+
+    /// @notice Grants issuer permissions to an account
+    /// @param account address that will be allowed to issue and revoke credentials
+    function grantIssuer(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(account != address(0), "Invalid issuer");
+        grantRole(ISSUER_ROLE, account);
+        emit IssuerGranted(account);
+    }
+
+    /// @notice Revokes issuer permissions from an account
+    /// @param account address that will no longer be allowed to issue or revoke credentials
+    function revokeIssuer(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(account != address(0), "Invalid issuer");
+        revokeRole(ISSUER_ROLE, account);
+        emit IssuerRevoked(account);
     }
 
     // ==========================================================================

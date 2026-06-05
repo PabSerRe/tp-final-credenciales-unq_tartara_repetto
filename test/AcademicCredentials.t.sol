@@ -35,6 +35,44 @@ contract AcademicCredentialsTest is Test {
     }
 
     // ==========================================================================
+    // ISSUER MANAGEMENT
+    // ==========================================================================
+
+    function test_AdminCanGrantIssuerRole() public {
+        credentials.grantIssuer(alice);
+
+        assertTrue(credentials.hasRole(credentials.ISSUER_ROLE(), alice));
+    }
+
+    function test_AdminCanRevokeIssuerRole() public {
+        credentials.grantIssuer(alice);
+        assertTrue(credentials.hasRole(credentials.ISSUER_ROLE(), alice));
+
+        credentials.revokeIssuer(alice);
+
+        assertFalse(credentials.hasRole(credentials.ISSUER_ROLE(), alice));
+    }
+
+    function test_GrantedIssuerCanIssueCredential() public {
+        credentials.grantIssuer(alice);
+
+        vm.prank(alice);
+        credentials.issueCredential(bob, 10, METADATA_URI);
+
+        assertEq(credentials.ownerOf(10), bob);
+        assertTrue(credentials.isValid(10));
+    }
+
+    function test_RevokedIssuerCannotIssueCredential() public {
+        credentials.grantIssuer(alice);
+        credentials.revokeIssuer(alice);
+
+        vm.prank(alice);
+        vm.expectRevert();
+        credentials.issueCredential(bob, 11, METADATA_URI);
+    }
+
+    // ==========================================================================
     // ISSUE
     // ==========================================================================
 

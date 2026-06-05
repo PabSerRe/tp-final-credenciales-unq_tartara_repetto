@@ -17,7 +17,7 @@ contract DeployAcademicCredentials is Script {
         vm.stopBroadcast();
 
         console.log("AcademicCredentials deployed at:", address(credentials));
-        console.log("Issuer (owner):", credentials.owner());
+        console.log("Deployer has DEFAULT_ADMIN_ROLE and ISSUER_ROLE:", msg.sender);
 
         return credentials;
     }

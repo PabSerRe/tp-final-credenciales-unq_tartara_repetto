@@ -29,8 +29,9 @@ contract AcademicCredentialsTest is Test {
         assertEq(credentials.symbol(), "UNQ-CRED");
     }
 
-    function test_DeployerIsOwner() public view {
-        assertEq(credentials.owner(), issuer);
+    function test_DeployerHasAdminAndIssuerRoles() public view {
+        assertTrue(credentials.hasRole(credentials.DEFAULT_ADMIN_ROLE(), issuer));
+        assertTrue(credentials.hasRole(credentials.ISSUER_ROLE(), issuer));
     }
 
     // ==========================================================================

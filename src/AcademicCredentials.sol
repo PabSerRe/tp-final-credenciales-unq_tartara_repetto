@@ -3,14 +3,15 @@ pragma solidity ^0.8.20;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @title AcademicCredentials
 /// @notice ERC-721 to issue and verify academic credentials (titulos) on-chain
 /// @dev Each tokenId represents a single, unique credential. Metadata (degree
 ///      name, student name hash, issue date, PDF hash) lives off-chain in IPFS
 ///      and is referenced by the tokenURI.
-contract AcademicCredentials is ERC721URIStorage, Ownable {
+contract AcademicCredentials is ERC721URIStorage, AccessControl {
+        bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
     // ==========================================================================
     // EVENTS
     // ==========================================================================
@@ -33,8 +34,10 @@ contract AcademicCredentials is ERC721URIStorage, Ownable {
     /// @dev    The owner is the only address allowed to issue or revoke credentials.
     constructor()
         ERC721("UNQ Academic Credential", "UNQ-CRED")
-        Ownable(msg.sender)
-    {}
+    {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(ISSUER_ROLE, msg.sender);
+    }
 
     // ==========================================================================
     // EXTERNAL — ISSUER
@@ -46,7 +49,7 @@ contract AcademicCredentials is ERC721URIStorage, Ownable {
     /// @param metadataURI ipfs:// or https:// URI pointing to the credential JSON
     function issueCredential(address student, uint256 tokenId, string memory metadataURI)
         public
-        onlyOwner
+        onlyRole(ISSUER_ROLE)
     {
         // We use _mint (not _safeMint) because credentials are always issued to
         // student wallets (EOAs or smart-contract wallets that already accept transfers).
@@ -58,7 +61,7 @@ contract AcademicCredentials is ERC721URIStorage, Ownable {
 
     /// @notice Revokes (burns) a previously issued credential
     /// @param tokenId credential id to revoke
-    function revoke(uint256 tokenId) public onlyOwner {
+    function revoke(uint256 tokenId) public onlyRole(ISSUER_ROLE) {
         _burn(tokenId);
         emit CredentialRevoked(tokenId);
     }
@@ -73,4 +76,13 @@ contract AcademicCredentials is ERC721URIStorage, Ownable {
     function isValid(uint256 tokenId) public view returns (bool) {
         return _ownerOf(tokenId) != address(0);
     }
+       /// @notice Required override because both ERC721URIStorage and AccessControl implement supportsInterface
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721URIStorage, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    } 
 }

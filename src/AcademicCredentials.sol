@@ -6,27 +6,48 @@ import {ERC721URIStorage} from "@openzeppelin/contracts/token/ERC721/extensions/
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /// @title AcademicCredentials
-/// @notice ERC-721 to issue and verify academic credentials (titulos) on-chain
-/// @dev Each tokenId represents a single, unique credential. Metadata (degree
-///      name, student name hash, issue date, PDF hash) lives off-chain in IPFS
-///      and is referenced by the tokenURI.
+/// @notice ERC-721 soulbound registry to issue and verify UNQ academic credentials on-chain
+/// @dev Each tokenId represents a single, unique credential. Metadata can live off-chain
+///      and be referenced by tokenURI, while critical verification data is stored on-chain.
 contract AcademicCredentials is ERC721URIStorage, AccessControl {
-        bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
+    bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
+
+    struct Credential {
+        string degreeName;
+        bytes32 studentNameHash;
+        uint256 issueDate;
+        bytes32 documentHash;
+        bool active;
+    }
+
+    mapping(uint256 => Credential) private _credentials;
+    mapping(uint256 => bool) private _issuedCredentialIds;
 
     /// @notice Reverts when someone tries to transfer a soulbound academic credential
     error SoulboundCredential();
+
     // ==========================================================================
     // EVENTS
     // ==========================================================================
 
-    /// @notice Emitted when the issuer mints a new credential
-    /// @param student     wallet address of the student that receives the title
-    /// @param tokenId     unique credential id (assigned by the issuer)
-    /// @param metadataURI ipfs URI of the credential JSON metadata
-    event CredentialIssued(address indexed student, uint256 indexed tokenId, string metadataURI);
+    /// @notice Emitted when an issuer mints a new credential
+    /// @param student wallet address of the student that receives the credential
+    /// @param tokenId unique credential id assigned by the issuer
+    /// @param metadataURI URI pointing to the credential JSON metadata
+    /// @param degreeName name of the academic degree or certification
+    /// @param studentNameHash hash of the student's identity data
+    /// @param documentHash hash of the academic document
+    event CredentialIssued(
+        address indexed student,
+        uint256 indexed tokenId,
+        string metadataURI,
+        string degreeName,
+        bytes32 studentNameHash,
+        bytes32 documentHash
+    );
 
-    /// @notice Emitted when the issuer revokes (burns) a credential
-    /// @param tokenId   credential id that was revoked
+    /// @notice Emitted when an issuer revokes a credential
+    /// @param tokenId credential id that was revoked
     event CredentialRevoked(uint256 indexed tokenId);
 
     /// @notice Emitted when an admin grants issuer permissions to an account
@@ -41,8 +62,7 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     // CONSTRUCTOR
     // ==========================================================================
 
-    /// @notice Deploys the credential registry. The deployer becomes the issuer.
-    /// @dev    The owner is the only address allowed to issue or revoke credentials.
+    /// @notice Deploys the credential registry. The deployer becomes admin and issuer.
     constructor()
         ERC721("UNQ Academic Credential", "UNQ-CRED")
     {
@@ -74,40 +94,89 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     // EXTERNAL — ISSUER
     // ==========================================================================
 
-    /// @notice Issues a new credential to a student
-    /// @param student     wallet that will own the credential
-    /// @param tokenId     unique id assigned to this credential
-    /// @param metadataURI ipfs:// or https:// URI pointing to the credential JSON
-    function issueCredential(address student, uint256 tokenId, string memory metadataURI)
+    /// @notice Issues a new academic credential to a student
+    /// @param student wallet that will own the credential
+    /// @param tokenId unique id assigned to this credential
+    /// @param metadataURI URI pointing to the credential JSON metadata
+    /// @param degreeName name of the academic degree or certification
+    /// @param studentNameHash hash of the student's identity data
+    /// @param documentHash hash of the academic document
+    function issueCredential(
+        address student,
+        uint256 tokenId,
+        string memory metadataURI,
+        string memory degreeName,
+        bytes32 studentNameHash,
+        bytes32 documentHash
+    )
         public
         onlyRole(ISSUER_ROLE)
     {
-        // We use _mint (not _safeMint) because credentials are always issued to
-        // student wallets (EOAs or smart-contract wallets that already accept transfers).
-        // _mint already reverts if `student` is the zero address.
+        require(bytes(degreeName).length > 0, "Invalid degree");
+        require(studentNameHash != bytes32(0), "Invalid student hash");
+        require(documentHash != bytes32(0), "Invalid document hash");
+        require(!_issuedCredentialIds[tokenId], "Credential already issued");
+
+        _issuedCredentialIds[tokenId] = true;
+
         _mint(student, tokenId);
         _setTokenURI(tokenId, metadataURI);
-        emit CredentialIssued(student, tokenId, metadataURI);
+
+        _credentials[tokenId] = Credential({
+            degreeName: degreeName,
+            studentNameHash: studentNameHash,
+            issueDate: block.timestamp,
+            documentHash: documentHash,
+            active: true
+        });
+
+        emit CredentialIssued(
+            student,
+            tokenId,
+            metadataURI,
+            degreeName,
+            studentNameHash,
+            documentHash
+        );
     }
 
-    /// @notice Revokes (burns) a previously issued credential
+    /// @notice Revokes a previously issued credential
     /// @param tokenId credential id to revoke
     function revoke(uint256 tokenId) public onlyRole(ISSUER_ROLE) {
+        require(_credentials[tokenId].active, "Credential not active");
+
+        _credentials[tokenId].active = false;
         _burn(tokenId);
+
         emit CredentialRevoked(tokenId);
     }
 
     // ==========================================================================
-    // PUBLIC — VERIFIERS (anyone)
+    // PUBLIC — VERIFIERS
     // ==========================================================================
 
-    /// @notice Convenience helper: tells you whether a credential is currently valid
+    /// @notice Returns the credential data and whether it is currently valid
     /// @param tokenId credential id
-    /// @return true if a credential with this id exists, false otherwise
-    function isValid(uint256 tokenId) public view returns (bool) {
-        return _ownerOf(tokenId) != address(0);
+    /// @return credential stored credential data
+    /// @return valid true if the credential exists, is active, and is currently owned
+    function verify(uint256 tokenId)
+        public
+        view
+        returns (Credential memory credential, bool valid)
+    {
+        credential = _credentials[tokenId];
+        valid = credential.active && _ownerOf(tokenId) != address(0);
     }
-       /// @notice Prevents transfers while still allowing minting and burning
+
+    /// @notice Convenience helper: tells whether a credential is currently valid
+    /// @param tokenId credential id
+    /// @return true if the credential exists and is active
+    function isValid(uint256 tokenId) public view returns (bool) {
+        (, bool valid) = verify(tokenId);
+        return valid;
+    }
+
+    /// @notice Prevents transfers while still allowing minting and burning
     /// @dev Academic credentials are soulbound: they cannot be transferred between wallets.
     function _update(address to, uint256 tokenId, address auth)
         internal
@@ -131,5 +200,5 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
-    } 
+    }
 }

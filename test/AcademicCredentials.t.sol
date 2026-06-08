@@ -14,10 +14,25 @@ contract AcademicCredentialsTest is Test {
     address public bob = makeAddr("bob");
 
     string public constant METADATA_URI = "ipfs://bafy.../credential-1.json";
+    string public constant DEGREE_NAME = "Licenciatura en Informatica";
+
+    bytes32 public constant STUDENT_NAME_HASH = keccak256("Alice Example");
+    bytes32 public constant DOCUMENT_HASH = keccak256("UNQ credential PDF");
 
     function setUp() public {
         issuer = address(this);
         credentials = new AcademicCredentials();
+    }
+
+    function issueDefault(address student, uint256 tokenId) internal {
+        credentials.issueCredential(
+            student,
+            tokenId,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
     }
 
     // ==========================================================================
@@ -57,7 +72,14 @@ contract AcademicCredentialsTest is Test {
         credentials.grantIssuer(alice);
 
         vm.prank(alice);
-        credentials.issueCredential(bob, 10, METADATA_URI);
+        credentials.issueCredential(
+            bob,
+            10,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
 
         assertEq(credentials.ownerOf(10), bob);
         assertTrue(credentials.isValid(10));
@@ -69,7 +91,14 @@ contract AcademicCredentialsTest is Test {
 
         vm.prank(alice);
         vm.expectRevert();
-        credentials.issueCredential(bob, 11, METADATA_URI);
+        credentials.issueCredential(
+            bob,
+            11,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
     }
 
     // ==========================================================================
@@ -77,7 +106,7 @@ contract AcademicCredentialsTest is Test {
     // ==========================================================================
 
     function test_IssuerCanIssue() public {
-        credentials.issueCredential(alice, 1, METADATA_URI);
+        issueDefault(alice, 1);
 
         assertEq(credentials.ownerOf(1), alice);
         assertEq(credentials.balanceOf(alice), 1);
@@ -88,25 +117,89 @@ contract AcademicCredentialsTest is Test {
     function test_NonIssuerCannotIssue() public {
         vm.prank(alice);
         vm.expectRevert();
-        credentials.issueCredential(bob, 2, METADATA_URI);
+        credentials.issueCredential(
+            bob,
+            2,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
     }
 
     function test_CannotIssueDuplicateTokenId() public {
-        credentials.issueCredential(alice, 1, METADATA_URI);
+        issueDefault(alice, 1);
 
-        vm.expectRevert();
-        credentials.issueCredential(bob, 1, METADATA_URI);
+        vm.expectRevert("Credential already issued");
+        credentials.issueCredential(
+            bob,
+            1,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
+    }
+
+    function test_CannotIssueWithEmptyDegreeName() public {
+        vm.expectRevert("Invalid degree");
+        credentials.issueCredential(
+            alice,
+            3,
+            METADATA_URI,
+            "",
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
+    }
+
+    function test_CannotIssueWithEmptyStudentNameHash() public {
+        vm.expectRevert("Invalid student hash");
+        credentials.issueCredential(
+            alice,
+            4,
+            METADATA_URI,
+            DEGREE_NAME,
+            bytes32(0),
+            DOCUMENT_HASH
+        );
+    }
+
+    function test_CannotIssueWithEmptyDocumentHash() public {
+        vm.expectRevert("Invalid document hash");
+        credentials.issueCredential(
+            alice,
+            5,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            bytes32(0)
+        );
     }
 
     function test_IssuingEmitsEvent() public {
         vm.expectEmit(true, true, false, true);
-        emit AcademicCredentials.CredentialIssued(alice, 42, METADATA_URI);
+        emit AcademicCredentials.CredentialIssued(
+            alice,
+            42,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
 
-        credentials.issueCredential(alice, 42, METADATA_URI);
+        credentials.issueCredential(
+            alice,
+            42,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
     }
 
     function test_CredentialCannotBeTransferred() public {
-        credentials.issueCredential(alice, 20, METADATA_URI);
+        issueDefault(alice, 20);
 
         vm.prank(alice);
         vm.expectRevert(AcademicCredentials.SoulboundCredential.selector);
@@ -118,7 +211,7 @@ contract AcademicCredentialsTest is Test {
     // ==========================================================================
 
     function test_IssuerCanRevoke() public {
-        credentials.issueCredential(alice, 1, METADATA_URI);
+        issueDefault(alice, 1);
         assertTrue(credentials.isValid(1));
 
         credentials.revoke(1);
@@ -128,7 +221,7 @@ contract AcademicCredentialsTest is Test {
     }
 
     function test_NonIssuerCannotRevoke() public {
-        credentials.issueCredential(alice, 1, METADATA_URI);
+        issueDefault(alice, 1);
 
         vm.prank(alice);
         vm.expectRevert();
@@ -136,12 +229,12 @@ contract AcademicCredentialsTest is Test {
     }
 
     function test_CannotRevokeNonExistent() public {
-        vm.expectRevert();
+        vm.expectRevert("Credential not active");
         credentials.revoke(999);
     }
 
     function test_RevokingEmitsEvent() public {
-        credentials.issueCredential(alice, 7, METADATA_URI);
+        issueDefault(alice, 7);
 
         vm.expectEmit(true, false, false, false);
         emit AcademicCredentials.CredentialRevoked(7);
@@ -158,9 +251,40 @@ contract AcademicCredentialsTest is Test {
     }
 
     function test_TokenURIReturnsMetadataURI() public {
-        credentials.issueCredential(alice, 5, "ipfs://bafy.../degree-systems-2025.json");
+        credentials.issueCredential(
+            alice,
+            5,
+            "ipfs://bafy.../degree-systems-2025.json",
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
 
         assertEq(credentials.tokenURI(5), "ipfs://bafy.../degree-systems-2025.json");
+    }
+
+    function test_VerifyReturnsCredentialData() public {
+        issueDefault(alice, 1);
+
+        (AcademicCredentials.Credential memory credential, bool valid) = credentials.verify(1);
+
+        assertTrue(valid);
+        assertEq(credential.degreeName, DEGREE_NAME);
+        assertEq(credential.studentNameHash, STUDENT_NAME_HASH);
+        assertEq(credential.issueDate, block.timestamp);
+        assertEq(credential.documentHash, DOCUMENT_HASH);
+        assertTrue(credential.active);
+    }
+
+    function test_VerifyReturnsInvalidAfterRevocation() public {
+        issueDefault(alice, 1);
+
+        credentials.revoke(1);
+
+        (AcademicCredentials.Credential memory credential, bool valid) = credentials.verify(1);
+
+        assertFalse(valid);
+        assertFalse(credential.active);
     }
 
     // ==========================================================================
@@ -170,7 +294,7 @@ contract AcademicCredentialsTest is Test {
     function testFuzz_IssueToAnyAddress(address student, uint256 tokenId) public {
         vm.assume(student != address(0));
 
-        credentials.issueCredential(student, tokenId, METADATA_URI);
+        issueDefault(student, tokenId);
 
         assertEq(credentials.ownerOf(tokenId), student);
         assertTrue(credentials.isValid(tokenId));
@@ -178,6 +302,13 @@ contract AcademicCredentialsTest is Test {
 
     function testFuzz_IssuerCannotIssueToZeroAddress(uint256 tokenId) public {
         vm.expectRevert();
-        credentials.issueCredential(address(0), tokenId, METADATA_URI);
+        credentials.issueCredential(
+            address(0),
+            tokenId,
+            METADATA_URI,
+            DEGREE_NAME,
+            STUDENT_NAME_HASH,
+            DOCUMENT_HASH
+        );
     }
 }

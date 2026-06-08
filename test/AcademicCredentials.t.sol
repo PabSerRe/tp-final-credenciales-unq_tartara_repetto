@@ -287,6 +287,13 @@ contract AcademicCredentialsTest is Test {
         assertFalse(credential.active);
     }
 
+    function test_SupportsExpectedInterfaces() public view {
+        assertTrue(credentials.supportsInterface(0x80ac58cd)); // ERC721
+        assertTrue(credentials.supportsInterface(0x5b5e139f)); // ERC721Metadata
+        assertTrue(credentials.supportsInterface(0x7965db0b)); // AccessControl
+        assertFalse(credentials.supportsInterface(0xffffffff));
+    }
+
     // ==========================================================================
     // FUZZ
     // ==========================================================================

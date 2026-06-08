@@ -12,6 +12,9 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 ///      and is referenced by the tokenURI.
 contract AcademicCredentials is ERC721URIStorage, AccessControl {
         bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
+
+    /// @notice Reverts when someone tries to transfer a soulbound academic credential
+    error SoulboundCredential();
     // ==========================================================================
     // EVENTS
     // ==========================================================================
@@ -104,7 +107,23 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     function isValid(uint256 tokenId) public view returns (bool) {
         return _ownerOf(tokenId) != address(0);
     }
-       /// @notice Required override because both ERC721URIStorage and AccessControl implement supportsInterface
+       /// @notice Prevents transfers while still allowing minting and burning
+    /// @dev Academic credentials are soulbound: they cannot be transferred between wallets.
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override(ERC721)
+        returns (address)
+    {
+        address from = _ownerOf(tokenId);
+
+        if (from != address(0) && to != address(0)) {
+            revert SoulboundCredential();
+        }
+
+        return super._update(to, tokenId, auth);
+    }
+
+    /// @notice Required override because both ERC721URIStorage and AccessControl implement supportsInterface
     function supportsInterface(bytes4 interfaceId)
         public
         view

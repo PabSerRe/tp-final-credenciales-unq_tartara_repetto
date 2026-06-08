@@ -105,6 +105,14 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(alice, 42, METADATA_URI);
     }
 
+    function test_CredentialCannotBeTransferred() public {
+        credentials.issueCredential(alice, 20, METADATA_URI);
+
+        vm.prank(alice);
+        vm.expectRevert(AcademicCredentials.SoulboundCredential.selector);
+        credentials.transferFrom(alice, bob, 20);
+    }
+
     // ==========================================================================
     // REVOKE
     // ==========================================================================

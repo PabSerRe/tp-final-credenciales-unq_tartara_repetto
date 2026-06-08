@@ -1,0 +1,13 @@
+'forge clean' running (wd: /home/pablo/diplounq2026/tp-final-credenciales-unq)
+'forge config --json' running
+'forge build --build-info src/AcademicCredentials.sol' running (wd: /home/pablo/diplounq2026/tp-final-credenciales-unq)
+INFO:Detectors:
+Detector: timestamp
+AcademicCredentials.revoke(uint256) (src/AcademicCredentials.sol#145-152) uses timestamp for comparisons
+	Dangerous comparisons:
+	- require(bool,string)(_credentials[tokenId].active,Credential not active) (src/AcademicCredentials.sol#146)
+AcademicCredentials.verify(uint256) (src/AcademicCredentials.sol#162-169) uses timestamp for comparisons
+	Dangerous comparisons:
+	- valid = credential.active && _ownerOf(tokenId) != address(0) (src/AcademicCredentials.sol#168)
+Reference: https://github.com/crytic/slither/wiki/Detector-Documentation#block-timestamp
+INFO:Slither:src/AcademicCredentials.sol analyzed (22 contracts with 101 detectors), 2 result(s) found

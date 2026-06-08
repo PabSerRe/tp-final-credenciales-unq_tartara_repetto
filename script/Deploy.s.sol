@@ -5,9 +5,13 @@ import {Script, console} from "forge-std/Script.sol";
 import {AcademicCredentials} from "../src/AcademicCredentials.sol";
 
 /// @title DeployAcademicCredentials
-/// @notice Deploys the AcademicCredentials registry. The deployer becomes the issuer.
-/// @dev    Run with:
-///         forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast --account dev-wallet
+/// @notice Despliega el registro de credenciales académicas UNQ.
+/// @dev El deployer queda configurado como DEFAULT_ADMIN_ROLE e ISSUER_ROLE.
+/// @dev Ejemplo de uso en Base Sepolia:
+///      forge script script/Deploy.s.sol:DeployAcademicCredentials \
+///        --rpc-url $BASE_SEPOLIA_RPC_URL \
+///        --broadcast \
+///        --account dev-wallet
 contract DeployAcademicCredentials is Script {
     function run() external returns (AcademicCredentials) {
         vm.startBroadcast();
@@ -16,8 +20,8 @@ contract DeployAcademicCredentials is Script {
 
         vm.stopBroadcast();
 
-        console.log("AcademicCredentials deployed at:", address(credentials));
-        console.log("Deployer has DEFAULT_ADMIN_ROLE and ISSUER_ROLE:", msg.sender);
+        console.log("AcademicCredentials desplegado en:", address(credentials));
+        console.log("El deployer recibe DEFAULT_ADMIN_ROLE e ISSUER_ROLE");
 
         return credentials;
     }

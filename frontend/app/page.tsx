@@ -84,8 +84,16 @@ export default function Home() {
       const result = await readContract.verify(BigInt(verifyTokenId));
       const credential = result[0];
       const valid = result[1];
-      const tokenURI = await readContract.tokenURI(BigInt(verifyTokenId));
-      const owner = await readContract.ownerOf(BigInt(verifyTokenId));
+      let tokenURI = 'No disponible';
+      let owner = 'No disponible';
+
+      try {
+        tokenURI = await readContract.tokenURI(BigInt(verifyTokenId));
+      } catch {}
+
+      try {
+        owner = await readContract.ownerOf(BigInt(verifyTokenId));
+      } catch {}
 
       setVerifyResult({
         owner,

@@ -28,10 +28,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             student,
             tokenId,
-            METADATA_URI,
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
     }
 
@@ -81,10 +81,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             bob,
             10,
-            METADATA_URI,
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
 
         assertEq(credentials.ownerOf(10), bob);
@@ -103,10 +103,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             bob,
             11,
-            METADATA_URI,
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
     }
 
@@ -129,10 +129,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             bob,
             2,
-            METADATA_URI,
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
     }
 
@@ -143,10 +143,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             bob,
             1,
-            METADATA_URI,
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
     }
 
@@ -155,10 +155,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             alice,
             3,
-            METADATA_URI,
             "",
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
     }
 
@@ -167,10 +167,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             alice,
             4,
-            METADATA_URI,
             DEGREE_NAME,
             bytes32(0),
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
     }
 
@@ -179,10 +179,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             alice,
             5,
-            METADATA_URI,
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            bytes32(0)
+            bytes32(0),
+            METADATA_URI
         );
     }
 
@@ -191,19 +191,17 @@ contract AcademicCredentialsTest is Test {
         emit AcademicCredentials.CredentialIssued(
             alice,
             42,
-            METADATA_URI,
             DEGREE_NAME,
-            STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            STUDENT_NAME_HASH
         );
 
         credentials.issueCredential(
             alice,
             42,
-            METADATA_URI,
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
     }
 
@@ -265,10 +263,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             alice,
             5,
-            "ipfs://bafy.../degree-systems-2025.json",
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            "ipfs://bafy.../degree-systems-2025.json"
         );
 
         assertEq(credentials.tokenURI(5), "ipfs://bafy.../degree-systems-2025.json");
@@ -323,10 +321,10 @@ contract AcademicCredentialsTest is Test {
         credentials.issueCredential(
             address(0),
             tokenId,
-            METADATA_URI,
             DEGREE_NAME,
             STUDENT_NAME_HASH,
-            DOCUMENT_HASH
+            DOCUMENT_HASH,
+            METADATA_URI
         );
     }
 }

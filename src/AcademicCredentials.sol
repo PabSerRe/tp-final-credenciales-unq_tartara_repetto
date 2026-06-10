@@ -33,17 +33,13 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     /// @notice Emitted when an issuer mints a new credential
     /// @param student wallet address of the student that receives the credential
     /// @param tokenId unique credential id assigned by the issuer
-    /// @param metadataURI URI pointing to the credential JSON metadata
     /// @param degreeName name of the academic degree or certification
     /// @param studentNameHash hash of the student's identity data
-    /// @param documentHash hash of the academic document
     event CredentialIssued(
         address indexed student,
         uint256 indexed tokenId,
-        string metadataURI,
         string degreeName,
-        bytes32 studentNameHash,
-        bytes32 documentHash
+        bytes32 studentNameHash
     );
 
     /// @notice Emitted when an issuer revokes a credential
@@ -101,17 +97,17 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     /// @notice Issues a new academic credential to a student
     /// @param student wallet that will own the credential
     /// @param tokenId unique id assigned to this credential
-    /// @param metadataURI URI pointing to the credential JSON metadata
     /// @param degreeName name of the academic degree or certification
     /// @param studentNameHash hash of the student's identity data
     /// @param documentHash hash of the academic document
+    /// @param metadataURI URI pointing to the credential JSON metadata
     function issueCredential(
         address student,
         uint256 tokenId,
-        string memory metadataURI,
         string memory degreeName,
         bytes32 studentNameHash,
-        bytes32 documentHash
+        bytes32 documentHash,
+        string memory metadataURI
     )
         public
         onlyRole(ISSUER_ROLE)
@@ -137,10 +133,8 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
         emit CredentialIssued(
             student,
             tokenId,
-            metadataURI,
             degreeName,
-            studentNameHash,
-            documentHash
+            studentNameHash
         );
     }
 

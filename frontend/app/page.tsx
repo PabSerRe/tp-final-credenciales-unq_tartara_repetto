@@ -1,27 +1,50 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { BrowserProvider, Contract, JsonRpcProvider, id, isAddress } from 'ethers';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { FormEvent, useEffect, useState } from 'react';
+import { useAccount, useWriteContract } from 'wagmi';
+import {
+  Address,
+  Hex,
+  createPublicClient,
+  http,
+  isAddress,
+  keccak256,
+  stringToHex,
+} from 'viem';
+import { baseSepolia } from 'wagmi/chains';
 import {
   CREDENTIALS_ADDRESS,
   CREDENTIALS_ABI,
   BASE_SEPOLIA_TX_URL,
+  BASE_SEPOLIA_ADDRESS_URL,
 } from '../contracts/credentials';
 
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
+const publicClient = createPublicClient({
+  chain: baseSepolia,
+  transport: http('https://sepolia.base.org'),
+});
 
-const BASE_SEPOLIA_RPC_URL = 'https://sepolia.base.org';
+type VerifyResult = {
+  owner: string;
+  tokenURI: string;
+  degreeName: string;
+  studentNameHash: string;
+  documentHash: string;
+  issueDate: string;
+  active: boolean;
+  valid: boolean;
+};
 
 export default function Home() {
-  const [account, setAccount] = useState('');
+  const { address, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
+
   const [isIssuer, setIsIssuer] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [verifyTokenId, setVerifyTokenId] = useState('');
-  const [verifyResult, setVerifyResult] = useState<any>(null);
+  const [verifyResult, setVerifyResult] = useState<VerifyResult | null>(null);
 
   const [studentAddress, setStudentAddress] = useState('');
   const [issueTokenId, setIssueTokenId] = useState('');
@@ -31,141 +54,274 @@ export default function Home() {
   const [documentText, setDocumentText] = useState('');
 
   const [revokeTokenId, setRevokeTokenId] = useState('');
+  const [revokeReason, setRevokeReason] = useState('');
+
+  const [issuerAddress, setIssuerAddress] = useState('');
 
   const [status, setStatus] = useState('');
   const [txHash, setTxHash] = useState('');
 
-  const readContract = useMemo(() => {
-    const provider = new JsonRpcProvider(BASE_SEPOLIA_RPC_URL);
-    return new Contract(CREDENTIALS_ADDRESS, CREDENTIALS_ABI, provider);
-  }, []);
-
-  async function getWriteContract() {
-    if (!window.ethereum) {
-      throw new Error('No se detectó MetaMask.');
-    }
-
-    const provider = new BrowserProvider(window.ethereum);
-    const signer = await provider.getSigner();
-
-    return new Contract(CREDENTIALS_ADDRESS, CREDENTIALS_ABI, signer);
-  }
-
-  async function connectWallet() {
-    setStatus('');
-    setTxHash('');
-
-    if (!window.ethereum) {
-      setStatus('No se detectó MetaMask.');
+  async function refreshRoles(wallet?: Address) {
+    if (!wallet) {
+      setIsIssuer(false);
+      setIsAdmin(false);
       return;
     }
 
-    const provider = new BrowserProvider(window.ethereum);
-    const accounts = await provider.send('eth_requestAccounts', []);
-    const connectedAccount = accounts[0];
+    const issuerRole = await publicClient.readContract({
+      address: CREDENTIALS_ADDRESS,
+      abi: CREDENTIALS_ABI,
+      functionName: 'ISSUER_ROLE',
+    }) as Hex;
 
-    setAccount(connectedAccount);
+    const adminRole = await publicClient.readContract({
+      address: CREDENTIALS_ADDRESS,
+      abi: CREDENTIALS_ABI,
+      functionName: 'DEFAULT_ADMIN_ROLE',
+    }) as Hex;
 
-    const issuerRole = await readContract.ISSUER_ROLE();
-    const hasIssuerRole = await readContract.hasRole(issuerRole, connectedAccount);
+    const hasIssuerRole = await publicClient.readContract({
+      address: CREDENTIALS_ADDRESS,
+      abi: CREDENTIALS_ABI,
+      functionName: 'hasRole',
+      args: [issuerRole, wallet],
+    }) as boolean;
 
-    setIsIssuer(Boolean(hasIssuerRole));
+    const hasAdminRole = await publicClient.readContract({
+      address: CREDENTIALS_ADDRESS,
+      abi: CREDENTIALS_ABI,
+      functionName: 'hasRole',
+      args: [adminRole, wallet],
+    }) as boolean;
+
+    setIsIssuer(hasIssuerRole);
+    setIsAdmin(hasAdminRole);
   }
 
-  async function verifyCredential(e: React.FormEvent) {
+  useEffect(() => {
+    refreshRoles(address);
+  }, [address]);
+
+  async function waitForTx(hash: Hex, successMessage: string) {
+    setTxHash(hash);
+    setStatus('Transacción enviada. Esperando confirmación...');
+
+    await publicClient.waitForTransactionReceipt({ hash });
+
+    setStatus(successMessage);
+    await refreshRoles(address);
+  }
+
+  async function verifyCredential(e: FormEvent) {
     e.preventDefault();
     setStatus('');
     setTxHash('');
     setVerifyResult(null);
 
-    if (!verifyTokenId) return;
+    if (!verifyTokenId) {
+      setStatus('Ingresá un tokenId.');
+      return;
+    }
 
     try {
-      const result = await readContract.verify(BigInt(verifyTokenId));
-      const credential = result[0];
-      const valid = result[1];
+      const [credential, valid] = await publicClient.readContract({
+        address: CREDENTIALS_ADDRESS,
+        abi: CREDENTIALS_ABI,
+        functionName: 'verify',
+        args: [BigInt(verifyTokenId)],
+      }) as any;
+
       let tokenURI = 'No disponible';
       let owner = 'No disponible';
 
       try {
-        tokenURI = await readContract.tokenURI(BigInt(verifyTokenId));
+        tokenURI = await publicClient.readContract({
+          address: CREDENTIALS_ADDRESS,
+          abi: CREDENTIALS_ABI,
+          functionName: 'tokenURI',
+          args: [BigInt(verifyTokenId)],
+        }) as string;
       } catch {}
 
       try {
-        owner = await readContract.ownerOf(BigInt(verifyTokenId));
+        owner = await publicClient.readContract({
+          address: CREDENTIALS_ADDRESS,
+          abi: CREDENTIALS_ABI,
+          functionName: 'ownerOf',
+          args: [BigInt(verifyTokenId)],
+        }) as string;
       } catch {}
+
+      const issueDateRaw = credential.issueDate ?? credential[2];
 
       setVerifyResult({
         owner,
         tokenURI,
-        degreeName: credential.degreeName,
-        studentNameHash: credential.studentNameHash,
-        documentHash: credential.documentHash,
-        issueDate: new Date(Number(credential.issueDate) * 1000).toLocaleString(),
-        active: credential.active,
-        valid,
+        degreeName: credential.degreeName ?? credential[0],
+        studentNameHash: credential.studentNameHash ?? credential[1],
+        documentHash: credential.documentHash ?? credential[3],
+        issueDate: new Date(Number(issueDateRaw) * 1000).toLocaleString(),
+        active: Boolean(credential.active ?? credential[4]),
+        valid: Boolean(valid),
       });
     } catch (err: any) {
-      setStatus(`Error al verificar: ${err.message}`);
+      setStatus(`Error al verificar: ${err.shortMessage ?? err.message}`);
     }
   }
 
-  async function issueCredential(e: React.FormEvent) {
+  async function issueCredential(e: FormEvent) {
     e.preventDefault();
     setStatus('');
     setTxHash('');
+
+    if (!isConnected || !address) {
+      setStatus('Conectá una wallet.');
+      return;
+    }
+
+    if (!isIssuer) {
+      setStatus('La wallet conectada no tiene ISSUER_ROLE.');
+      return;
+    }
 
     if (!isAddress(studentAddress)) {
       setStatus('La dirección del estudiante no es válida.');
       return;
     }
 
+    if (!issueTokenId || !metadataURI || !degreeName || !studentName || !documentText) {
+      setStatus('Completá todos los campos de emisión.');
+      return;
+    }
+
     try {
-      const contract = await getWriteContract();
+      const studentNameHash = keccak256(stringToHex(studentName));
+      const documentHash = keccak256(stringToHex(documentText));
 
-      const studentNameHash = id(studentName);
-      const documentHash = id(documentText);
+      const hash = await writeContractAsync({
+        address: CREDENTIALS_ADDRESS,
+        abi: CREDENTIALS_ABI,
+        functionName: 'issueCredential',
+        args: [
+          studentAddress as Address,
+          BigInt(issueTokenId),
+          degreeName,
+          studentNameHash,
+          documentHash,
+          metadataURI,
+        ],
+      });
 
-      const tx = await contract.issueCredential(
-        studentAddress,
-        BigInt(issueTokenId),
-        metadataURI,
-        degreeName,
-        studentNameHash,
-        documentHash
-      );
-
-      setTxHash(tx.hash);
-      setStatus('Transacción enviada. Esperando confirmación...');
-
-      await tx.wait();
-
-      setStatus('Credencial emitida correctamente.');
+      await waitForTx(hash, 'Credencial emitida correctamente.');
     } catch (err: any) {
-      setStatus(`Error al emitir: ${err.message}`);
+      setStatus(`Error al emitir: ${err.shortMessage ?? err.message}`);
     }
   }
 
-  async function revokeCredential(e: React.FormEvent) {
+  async function revokeCredential(e: FormEvent) {
     e.preventDefault();
     setStatus('');
     setTxHash('');
 
+    if (!isConnected || !address) {
+      setStatus('Conectá una wallet.');
+      return;
+    }
+
+    if (!isIssuer) {
+      setStatus('La wallet conectada no tiene ISSUER_ROLE.');
+      return;
+    }
+
+    if (!revokeTokenId || !revokeReason) {
+      setStatus('Ingresá tokenId y motivo de revocación.');
+      return;
+    }
+
     try {
-      const contract = await getWriteContract();
+      const hash = await writeContractAsync({
+        address: CREDENTIALS_ADDRESS,
+        abi: CREDENTIALS_ABI,
+        functionName: 'revoke',
+        args: [BigInt(revokeTokenId), revokeReason],
+      });
 
-      const tx = await contract.revoke(BigInt(revokeTokenId));
-
-      setTxHash(tx.hash);
-      setStatus('Transacción enviada. Esperando confirmación...');
-
-      await tx.wait();
-
-      setStatus('Credencial revocada correctamente.');
+      await waitForTx(hash, 'Credencial revocada correctamente.');
     } catch (err: any) {
-      setStatus(`Error al revocar: ${err.message}`);
+      setStatus(`Error al revocar: ${err.shortMessage ?? err.message}`);
     }
   }
+
+  async function grantIssuer(e: FormEvent) {
+    e.preventDefault();
+    setStatus('');
+    setTxHash('');
+
+    if (!isAdmin) {
+      setStatus('La wallet conectada no tiene DEFAULT_ADMIN_ROLE.');
+      return;
+    }
+
+    if (!isAddress(issuerAddress)) {
+      setStatus('La dirección del issuer no es válida.');
+      return;
+    }
+
+    try {
+      const hash = await writeContractAsync({
+        address: CREDENTIALS_ADDRESS,
+        abi: CREDENTIALS_ABI,
+        functionName: 'grantIssuer',
+        args: [issuerAddress as Address],
+      });
+
+      await waitForTx(hash, 'Issuer agregado correctamente.');
+    } catch (err: any) {
+      setStatus(`Error al agregar issuer: ${err.shortMessage ?? err.message}`);
+    }
+  }
+
+  async function revokeIssuer(e: FormEvent) {
+    e.preventDefault();
+    setStatus('');
+    setTxHash('');
+
+    if (!isAdmin) {
+      setStatus('La wallet conectada no tiene DEFAULT_ADMIN_ROLE.');
+      return;
+    }
+
+    if (!isAddress(issuerAddress)) {
+      setStatus('La dirección del issuer no es válida.');
+      return;
+    }
+
+    try {
+      const hash = await writeContractAsync({
+        address: CREDENTIALS_ADDRESS,
+        abi: CREDENTIALS_ABI,
+        functionName: 'revokeIssuer',
+        args: [issuerAddress as Address],
+      });
+
+      await waitForTx(hash, 'Issuer revocado correctamente.');
+    } catch (err: any) {
+      setStatus(`Error al revocar issuer: ${err.shortMessage ?? err.message}`);
+    }
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '0.5rem',
+    marginBottom: '0.75rem',
+  };
+
+  const sectionStyle = {
+    border: '1px solid #ccc',
+    borderRadius: '8px',
+    padding: '1rem',
+    marginTop: '1rem',
+  };
 
   return (
     <main style={{ padding: '2rem', maxWidth: '900px', margin: '0 auto', fontFamily: 'Arial, sans-serif' }}>
@@ -174,29 +330,31 @@ export default function Home() {
       <p>Sistema de emisión y verificación de credenciales académicas sobre Base Sepolia.</p>
 
       <p style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>
-        Contrato: {CREDENTIALS_ADDRESS}
+        Contrato:{' '}
+        <a href={`${BASE_SEPOLIA_ADDRESS_URL}/${CREDENTIALS_ADDRESS}`} target="_blank" rel="noopener noreferrer">
+          {CREDENTIALS_ADDRESS}
+        </a>
       </p>
 
-      <button onClick={connectWallet} style={{ padding: '0.6rem 1rem', marginBottom: '1rem' }}>
-        {account ? 'Wallet conectada' : 'Conectar wallet'}
-      </button>
+      <ConnectButton />
 
-      {account && (
+      {isConnected && address && (
         <p style={{ fontSize: '0.9rem', wordBreak: 'break-all' }}>
-          Wallet: {account}<br />
-          Rol issuer: {isIssuer ? 'sí' : 'no'}
+          Wallet: {address}<br />
+          DEFAULT_ADMIN_ROLE: {isAdmin ? 'sí' : 'no'}<br />
+          ISSUER_ROLE: {isIssuer ? 'sí' : 'no'}
         </p>
       )}
 
-      <section style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
-        <h2>Verificar credencial</h2>
+      <section style={sectionStyle}>
+        <h2>Verificación pública de credencial</h2>
 
         <form onSubmit={verifyCredential}>
           <input
             value={verifyTokenId}
             onChange={(e) => setVerifyTokenId(e.target.value)}
             placeholder="Token ID"
-            style={{ width: '100%', padding: '0.5rem', marginBottom: '0.75rem' }}
+            style={inputStyle}
           />
 
           <button type="submit" style={{ padding: '0.5rem 1rem' }}>
@@ -209,7 +367,7 @@ export default function Home() {
             <strong>Resultado:</strong><br />
             Válida: {verifyResult.valid ? 'sí' : 'no'}<br />
             Activa: {verifyResult.active ? 'sí' : 'no'}<br />
-            Título / curso: {verifyResult.degreeName}<br />
+            Título: {verifyResult.degreeName}<br />
             Fecha de emisión: {verifyResult.issueDate}<br />
             Owner: {verifyResult.owner}<br />
             Token URI: {verifyResult.tokenURI}<br />
@@ -219,18 +377,41 @@ export default function Home() {
         )}
       </section>
 
+      {isAdmin && (
+        <section style={sectionStyle}>
+          <h2>Administrar issuers</h2>
+
+          <form>
+            <input
+              value={issuerAddress}
+              onChange={(e) => setIssuerAddress(e.target.value)}
+              placeholder="Wallet issuer"
+              style={inputStyle}
+            />
+
+            <button onClick={grantIssuer} style={{ padding: '0.5rem 1rem', marginRight: '0.5rem' }}>
+              Agregar issuer
+            </button>
+
+            <button onClick={revokeIssuer} style={{ padding: '0.5rem 1rem' }}>
+              Revocar issuer
+            </button>
+          </form>
+        </section>
+      )}
+
       {isIssuer && (
         <>
-          <section style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
+          <section style={sectionStyle}>
             <h2>Emitir credencial</h2>
 
             <form onSubmit={issueCredential}>
-              <input value={studentAddress} onChange={(e) => setStudentAddress(e.target.value)} placeholder="Wallet del estudiante" style={{ width: '100%', padding: '0.5rem', marginBottom: '0.75rem' }} />
-              <input value={issueTokenId} onChange={(e) => setIssueTokenId(e.target.value)} placeholder="Token ID" style={{ width: '100%', padding: '0.5rem', marginBottom: '0.75rem' }} />
-              <input value={metadataURI} onChange={(e) => setMetadataURI(e.target.value)} placeholder="Metadata URI" style={{ width: '100%', padding: '0.5rem', marginBottom: '0.75rem' }} />
-              <input value={degreeName} onChange={(e) => setDegreeName(e.target.value)} placeholder="Título / curso" style={{ width: '100%', padding: '0.5rem', marginBottom: '0.75rem' }} />
-              <input value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="Nombre del estudiante para hash" style={{ width: '100%', padding: '0.5rem', marginBottom: '0.75rem' }} />
-              <input value={documentText} onChange={(e) => setDocumentText(e.target.value)} placeholder="Texto/documento para hash" style={{ width: '100%', padding: '0.5rem', marginBottom: '0.75rem' }} />
+              <input value={studentAddress} onChange={(e) => setStudentAddress(e.target.value)} placeholder="Wallet del estudiante" style={inputStyle} />
+              <input value={issueTokenId} onChange={(e) => setIssueTokenId(e.target.value)} placeholder="Token ID" style={inputStyle} />
+              <input value={degreeName} onChange={(e) => setDegreeName(e.target.value)} placeholder="Título" style={inputStyle} />
+              <input value={studentName} onChange={(e) => setStudentName(e.target.value)} placeholder="Nombre del estudiante para hash" style={inputStyle} />
+              <input value={documentText} onChange={(e) => setDocumentText(e.target.value)} placeholder="Texto/documento para hash" style={inputStyle} />
+              <input value={metadataURI} onChange={(e) => setMetadataURI(e.target.value)} placeholder="Metadata URI" style={inputStyle} />
 
               <button type="submit" style={{ padding: '0.5rem 1rem' }}>
                 Emitir
@@ -238,11 +419,12 @@ export default function Home() {
             </form>
           </section>
 
-          <section style={{ border: '1px solid #ccc', borderRadius: '8px', padding: '1rem', marginTop: '1rem' }}>
+          <section style={sectionStyle}>
             <h2>Revocar credencial</h2>
 
             <form onSubmit={revokeCredential}>
-              <input value={revokeTokenId} onChange={(e) => setRevokeTokenId(e.target.value)} placeholder="Token ID" style={{ width: '100%', padding: '0.5rem', marginBottom: '0.75rem' }} />
+              <input value={revokeTokenId} onChange={(e) => setRevokeTokenId(e.target.value)} placeholder="Token ID" style={inputStyle} />
+              <input value={revokeReason} onChange={(e) => setRevokeReason(e.target.value)} placeholder="Motivo de revocación" style={inputStyle} />
 
               <button type="submit" style={{ padding: '0.5rem 1rem' }}>
                 Revocar

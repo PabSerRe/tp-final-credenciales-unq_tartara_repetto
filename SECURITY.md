@@ -42,6 +42,20 @@ Resumen del resultado:
 
 22 contratos analizados con 101 detectores. Slither informó hallazgos principalmente en dependencias de OpenZeppelin/lib y una advertencia aceptable de timestamp sobre el contrato propio.
 
+## Findings de Slither documentados
+
+| Detector                 | Origen                                | Evaluación                                                                                                |
+| ------------------------ | ------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `incorrect-exp`          | OpenZeppelin `Math.sol`               | No corresponde a lógica propia. Se documenta como hallazgo en dependencia.                                |
+| `divide-before-multiply` | OpenZeppelin `Math.sol`               | No corresponde a lógica propia. Se acepta por uso de librería estándar.                                   |
+| `timestamp`              | Contrato propio                       | Riesgo aceptado. `block.timestamp` solo registra `issueDate`; no define permisos, vencimientos ni fondos. |
+| `assembly`               | OpenZeppelin                          | No corresponde a lógica propia. Uso interno de librerías auditadas.                                       |
+| `pragma`                 | OpenZeppelin + contrato propio        | Aviso por múltiples pragmas en dependencias. El contrato propio usa Solidity `^0.8.20`.                   |
+| `solc-version`           | OpenZeppelin + contrato propio        | Aviso genérico de Slither sobre rangos de compilador. El proyecto compila con Solidity 0.8.28.            |
+| `too-many-digits`        | OpenZeppelin `Bytes.sol` / `Math.sol` | No corresponde a lógica propia. Se documenta como hallazgo en dependencia.                                |
+
+No se detectaron findings High/Medium propios sin justificar. Los hallazgos relevantes quedan documentados y no requieren modificar el contrato.
+
 ## Hallazgos
 
 ### 1. Detector timestamp

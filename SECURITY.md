@@ -36,11 +36,11 @@ La cobertura total es menor que la cobertura específica del contrato porque el 
 
 Slither se ejecutó con el siguiente comando:
 
-slither src/AcademicCredentials.sol --filter-paths "lib"
+slither . 2>&1 | tee slither-output-tp-final.txt
 
 Resumen del resultado:
 
-src/AcademicCredentials.sol analyzed (22 contracts with 101 detectors), 2 result(s) found
+22 contratos analizados con 101 detectores. Slither informó hallazgos principalmente en dependencias de OpenZeppelin/lib y una advertencia aceptable de timestamp sobre el contrato propio.
 
 ## Hallazgos
 
@@ -48,7 +48,7 @@ src/AcademicCredentials.sol analyzed (22 contracts with 101 detectors), 2 result
 
 Slither informó advertencias del detector timestamp en las siguientes funciones:
 
-- revoke(uint256)
+- revoke(uint256,string)
 - verify(uint256)
 
 La advertencia está relacionada con el uso de block.timestamp para guardar el campo issueDate.
@@ -95,6 +95,40 @@ La suite de pruebas verifica que:
 - las credenciales revocadas dejan de ser válidas;
 - verify(tokenId) devuelve los datos de la credencial y su estado de validez;
 - el contrato declara correctamente las interfaces esperadas.
+
+## Checklist de seguridad
+
+* Solidity `^0.8.20`.
+* Uso de `AccessControl`.
+* `DEFAULT_ADMIN_ROLE` administra altas y bajas de issuers.
+* `ISSUER_ROLE` emite y revoca credenciales.
+* Validación de `address(0)` en gestión de issuers.
+* Validación de título no vacío.
+* Validación de `studentNameHash` no vacío.
+* Validación de `documentHash` no vacío.
+* Prevención de `tokenId` duplicado.
+* Credenciales soulbound: no transferibles.
+* Revocación con motivo mediante `revoke(tokenId, reason)`.
+* Eventos en emisión, revocación y gestión de issuers.
+* Sin `tx.origin`.
+* Sin `delegatecall`.
+* Sin `selfdestruct`.
+* Sin manejo de fondos.
+* Sin lógica de aleatoriedad.
+* Sin decisiones críticas basadas en `block.timestamp`.
+
+## Análisis propio de riesgos
+
+Si se pierde la wallet con `DEFAULT_ADMIN_ROLE`, no se podrían agregar ni quitar issuers. En una versión productiva debería usarse una multisig institucional.
+
+Si se compromete una wallet con `ISSUER_ROLE`, podría emitir o revocar credenciales indebidamente. La mitigación prevista es que el admin pueda revocar ese rol y que los eventos permitan auditar lo ocurrido.
+
+Si se emite una credencial con datos incorrectos, la solución es revocarla con motivo y emitir una nueva credencial corregida. La blockchain conserva la trazabilidad del error y de la revocación.
+
+El front-running no representa un riesgo crítico en este diseño porque no hay fondos, subastas ni beneficios económicos asociados al orden de transacciones.
+
+El `studentNameHash` puede ser vulnerable a ataques de diccionario si se hashean datos simples. En una versión institucional debería usarse un esquema con sal o datos combinados no públicos.
+
 
 ## Conclusión
 

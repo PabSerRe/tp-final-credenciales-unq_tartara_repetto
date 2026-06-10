@@ -48,15 +48,19 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
 
     /// @notice Emitted when an issuer revokes a credential
     /// @param tokenId credential id that was revoked
-    event CredentialRevoked(uint256 indexed tokenId);
+    /// @param by issuer address that revoked the credential
+    /// @param reason reason for revocation
+    event CredentialRevoked(uint256 indexed tokenId, address indexed by, string reason);
 
     /// @notice Emitted when an admin grants issuer permissions to an account
     /// @param account address that receives ISSUER_ROLE
-    event IssuerGranted(address indexed account);
+    /// @param by admin address that granted the role
+    event IssuerGranted(address indexed account, address indexed by);
 
     /// @notice Emitted when an admin revokes issuer permissions from an account
     /// @param account address that loses ISSUER_ROLE
-    event IssuerRevoked(address indexed account);
+    /// @param by admin address that revoked the role
+    event IssuerRevoked(address indexed account, address indexed by);
 
     // ==========================================================================
     // CONSTRUCTOR
@@ -79,7 +83,7 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     function grantIssuer(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(account != address(0), "Invalid issuer");
         grantRole(ISSUER_ROLE, account);
-        emit IssuerGranted(account);
+        emit IssuerGranted(account, msg.sender);
     }
 
     /// @notice Revokes issuer permissions from an account
@@ -87,7 +91,7 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
     function revokeIssuer(address account) public onlyRole(DEFAULT_ADMIN_ROLE) {
         require(account != address(0), "Invalid issuer");
         revokeRole(ISSUER_ROLE, account);
-        emit IssuerRevoked(account);
+        emit IssuerRevoked(account, msg.sender);
     }
 
     // ==========================================================================
@@ -142,13 +146,13 @@ contract AcademicCredentials is ERC721URIStorage, AccessControl {
 
     /// @notice Revokes a previously issued credential
     /// @param tokenId credential id to revoke
-    function revoke(uint256 tokenId) public onlyRole(ISSUER_ROLE) {
+    function revoke(uint256 tokenId, string memory reason) public onlyRole(ISSUER_ROLE) {
         require(_credentials[tokenId].active, "Credential not active");
 
         _credentials[tokenId].active = false;
         _burn(tokenId);
 
-        emit CredentialRevoked(tokenId);
+        emit CredentialRevoked(tokenId, msg.sender, reason);
     }
 
     // ==========================================================================

@@ -54,6 +54,9 @@ contract AcademicCredentialsTest is Test {
     // ==========================================================================
 
     function test_AdminCanGrantIssuerRole() public {
+        vm.expectEmit(true, true, false, false);
+        emit AcademicCredentials.IssuerGranted(alice, address(this));
+
         credentials.grantIssuer(alice);
 
         assertTrue(credentials.hasRole(credentials.ISSUER_ROLE(), alice));
@@ -62,6 +65,9 @@ contract AcademicCredentialsTest is Test {
     function test_AdminCanRevokeIssuerRole() public {
         credentials.grantIssuer(alice);
         assertTrue(credentials.hasRole(credentials.ISSUER_ROLE(), alice));
+
+        vm.expectEmit(true, true, false, false);
+        emit AcademicCredentials.IssuerRevoked(alice, address(this));
 
         credentials.revokeIssuer(alice);
 
@@ -87,6 +93,9 @@ contract AcademicCredentialsTest is Test {
 
     function test_RevokedIssuerCannotIssueCredential() public {
         credentials.grantIssuer(alice);
+        vm.expectEmit(true, true, false, false);
+        emit AcademicCredentials.IssuerRevoked(alice, address(this));
+
         credentials.revokeIssuer(alice);
 
         vm.prank(alice);
@@ -214,7 +223,7 @@ contract AcademicCredentialsTest is Test {
         issueDefault(alice, 1);
         assertTrue(credentials.isValid(1));
 
-        credentials.revoke(1);
+        credentials.revoke(1, "Error administrativo");
 
         assertFalse(credentials.isValid(1));
         assertEq(credentials.balanceOf(alice), 0);
@@ -225,21 +234,23 @@ contract AcademicCredentialsTest is Test {
 
         vm.prank(alice);
         vm.expectRevert();
-        credentials.revoke(1);
+        credentials.revoke(1, "Error administrativo");
     }
 
     function test_CannotRevokeNonExistent() public {
         vm.expectRevert("Credential not active");
-        credentials.revoke(999);
+        credentials.revoke(999, "Token inexistente");
     }
 
     function test_RevokingEmitsEvent() public {
         issueDefault(alice, 7);
 
-        vm.expectEmit(true, false, false, false);
-        emit AcademicCredentials.CredentialRevoked(7);
+        string memory reason = "Error administrativo";
 
-        credentials.revoke(7);
+        vm.expectEmit(true, true, false, true);
+        emit AcademicCredentials.CredentialRevoked(7, address(this), reason);
+
+        credentials.revoke(7, reason);
     }
 
     // ==========================================================================
@@ -279,7 +290,7 @@ contract AcademicCredentialsTest is Test {
     function test_VerifyReturnsInvalidAfterRevocation() public {
         issueDefault(alice, 1);
 
-        credentials.revoke(1);
+        credentials.revoke(1, "Error administrativo");
 
         (AcademicCredentials.Credential memory credential, bool valid) = credentials.verify(1);
 

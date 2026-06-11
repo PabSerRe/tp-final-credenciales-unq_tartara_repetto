@@ -72,6 +72,99 @@ test/AcademicCredentials.t.sol
   Suite de tests unitarios y de fuzzing.
 ~~~
 
+
+### Diagramas de arquitectura
+
+#### Componentes del sistema
+
+```mermaid
+flowchart LR
+    Verificador["Usuario / Verificador público"]
+    Egresado["Egresado / titular de credencial"]
+    Admin["Wallet con DEFAULT_ADMIN_ROLE"]
+    Issuer["Wallet con ISSUER_ROLE"]
+
+    Frontend["Frontend Next.js<br/>RainbowKit + wagmi + viem"]
+    Wallet["MetaMask / Wallet"]
+    Network["Base Sepolia"]
+    Contract["AcademicCredentials.sol<br/>ERC-721 soulbound"]
+    Explorer["BaseScan<br/>eventos y contrato verificado"]
+
+    Verificador --> Frontend
+    Egresado --> Frontend
+    Admin --> Frontend
+    Issuer --> Frontend
+
+    Frontend --> Wallet
+    Wallet --> Network
+    Network --> Contract
+    Contract --> Explorer
+```
+
+#### Modelo de datos de una credencial
+
+```mermaid
+flowchart TB
+    Token["tokenId<br/>Identificador público de la credencial"]
+
+    subgraph Credential["struct Credential"]
+        Degree["degreeName<br/>Nombre del título final"]
+        StudentHash["studentNameHash<br/>Hash del nombre del estudiante"]
+        IssueDate["issueDate<br/>Fecha de emisión"]
+        DocumentHash["documentHash<br/>Hash del documento respaldatorio"]
+        Active["active<br/>Estado vigente o revocado"]
+        Metadata["metadataURI<br/>Referencia externa a metadata"]
+    end
+
+    Token --> Credential
+    Credential --> Degree
+    Credential --> StudentHash
+    Credential --> IssueDate
+    Credential --> DocumentHash
+    Credential --> Active
+    Credential --> Metadata
+```
+
+#### Flujo de emisión de una credencial
+
+```mermaid
+sequenceDiagram
+    participant Admin as Wallet admin
+    participant Issuer as Wallet issuer
+    participant Frontend as Frontend
+    participant MetaMask as MetaMask
+    participant Contract as AcademicCredentials
+    participant BaseScan as BaseScan
+
+    Admin->>Frontend: Agrega una wallet emisora
+    Frontend->>MetaMask: Solicita firma de grantIssuer
+    MetaMask->>Contract: grantIssuer(address)
+    Contract-->>BaseScan: Evento IssuerGranted
+
+    Issuer->>Frontend: Completa datos de la credencial
+    Frontend->>MetaMask: Solicita firma de emisión
+    MetaMask->>Contract: issueCredential(...)
+    Contract-->>BaseScan: Evento CredentialIssued
+    Contract-->>Frontend: Credencial emitida
+```
+
+#### Flujo de verificación pública
+
+```mermaid
+sequenceDiagram
+    participant User as Verificador público
+    participant Frontend as Frontend
+    participant Contract as AcademicCredentials
+    participant Chain as Base Sepolia
+
+    User->>Frontend: Ingresa tokenId
+    Frontend->>Contract: verify(tokenId)
+    Contract->>Chain: Lee datos on-chain
+    Chain-->>Contract: Credencial registrada
+    Contract-->>Frontend: Datos, hashes, fecha y estado
+    Frontend-->>User: Muestra si la credencial es válida o revocada
+```
+
 ---
 
 ## 3. Contrato desplegado
